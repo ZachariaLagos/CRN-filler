@@ -18,6 +18,10 @@
 // ---------------- Settings ----------------
 const SEL = {
   findClassesTab: "#classSearch-tab",
+  enterCrnsTab: "#enterCRNs-tab, a[href='#enterCRNs']",
+  crnInput1: "#txt_crn1",
+  allCrnInputs: "input[id^='txt_crn']",
+  addToSummaryBtn: "#addCRNbutton",
   searchGo: "#search-go",
   searchAgain: "#search-again-button",
   submitBtn: "#saveButton",
@@ -78,6 +82,7 @@ function findButton(selector, textRe, scope = document) {
 
 const BTN_TEXT = {
   add: /^add( course| section)?$/i,
+  addToSummary: /^add to summary$/i,
   submit: /^submit$/i,
 };
 
@@ -238,32 +243,127 @@ async function maxPageSize() {
   await sleep(300);
 }
 
-async function runSearch(cfg) {
+// Find a CRN box in the search form (not the "Enter CRNs" tab's txt_crn1, txt_crn2…).
+function searchCrnBox() {
+  const form = document.querySelector(SEL.searchGo)?.closest("form, [role=tabpanel], .ui-tabs-panel, #search-form") || document;
+  const isEnterCrnsBox = (el) => /^txt_crn\d+$/i.test(el.id || "");
+  const byAttr = [...form.querySelectorAll("input[type=text], input:not([type])")].find((i) =>
+    isVisible(i) && !isEnterCrnsBox(i) &&
+    /(^|[^a-z])crn([^a-z]|$)|courseReferenceNumber/i.test([i.id, i.name, i.placeholder, i.getAttribute("aria-label")].join(" ")));
+  if (byAttr) return byAttr;
+  const label = [...form.querySelectorAll("label")].find((l) => /^\s*crn\s*$/i.test(l.textContent));
+  const el = label?.htmlFor ? document.getElementById(label.htmlFor) : null;
+  return el && isVisible(el) && !isEnterCrnsBox(el) ? el : null;
+}
+
+async function clearSelect2(field) {
+  const box = select2Box(field);
+  if (!box) return;
+  for (const x of box.querySelectorAll(".select2-search-choice-close, .select2-selection__choice__remove")) {
+    fire(x, ["mousedown", "mouseup", "click"]);
+    await sleep(100);
+  }
+}
+
+// Get to the search form with Advanced Search open.
+async function openSearchForm() {
   const tab = document.querySelector(SEL.findClassesTab);
   if (tab && isVisible(tab)) { tab.click(); await sleep(300); }
-
   if (resultsVisible()) {
     document.querySelector(SEL.searchAgain).click();
     await waitUntil(searchFormVisible, 8000);
   }
   if (!searchFormVisible()) return "Couldn’t find the Find Classes search form.";
-
-  // Open Advanced Search so the College and Campus boxes show.
-  const advField = cfg.college ? "college" : "campus";
-  if (!isVisible(select2Box(advField))) {
+  // The Advanced Search link toggles, so only click it when it's closed.
+  const advancedOpen = () => ["campus", "college", "attribute"].some((f) => isVisible(select2Box(f))) || !!searchCrnBox();
+  if (!advancedOpen()) {
     const adv = [...document.querySelectorAll("a, button")].find((a) => isVisible(a) && /advanced search/i.test(a.innerText));
-    if (adv) { adv.click(); await waitUntil(() => isVisible(select2Box(advField)), 5000); }
+    if (adv) { adv.click(); await waitUntil(advancedOpen, 5000); }
   }
+  return null;
+}
 
-  const subjErr = await chooseOption("subject", cfg.subject);
-  if (subjErr) return subjErr;
-  if (cfg.college) {
-    const colErr = await chooseOption("college", cfg.college);
-    if (colErr) return colErr;
-  }
-  if (cfg.campus) {
-    const campErr = await chooseOption("campus", cfg.campus);
-    if (campErr) return campErr;
+// Does Advanced Search have a CRN box? null = page not ready.
+async function detectCrnBox(readyTimeout) {
+  const ready = await waitFor(`${SEL.searchGo}, ${SEL.searchAgain}, ${SEL.findClassesTab}`, readyTimeout);
+  if (!ready) return null;
+  if (await openSearchForm()) return null;
+  return !!searchCrnBox();
+}
+
+// ---------------- Enter CRNs tab ----------------
+// The "Enter CRNs" tab sits next to "Find Classes" (Find Classes | Enter CRNs |
+// Plans | Schedule and Options). You type a CRN, click Add to Summary, then Submit.
+function enterCrnsTab() {
+  const byId = document.querySelector(SEL.enterCrnsTab);
+  if (byId && isVisible(byId)) return byId;
+  return [...document.querySelectorAll("[role=tab], .ui-tabs-anchor, a, li")].find((t) =>
+    isVisible(t) && /^\s*enter crns\s*$/i.test(t.textContent)) || null;
+}
+
+// Is the Enter CRNs tab there? null = page not ready.
+async function detectEnterCrnsTab(readyTimeout) {
+  const ready = await waitFor(`${SEL.searchGo}, ${SEL.searchAgain}, ${SEL.findClassesTab}, ${SEL.enterCrnsTab}`, readyTimeout);
+  if (!ready) return null;
+  await sleep(300);
+  return !!enterCrnsTab();
+}
+
+// Type one CRN into Enter CRNs → Add to Summary. Returns like findAndAddOne.
+async function addViaEnterCrns(crn) {
+  const base = { added: [], missing: [], notFound: [], noButton: [], full: [] };
+  // Already in the summary from an earlier try and not failed? Then just resubmit.
+  if (rowFor(crn) && statusOf(crn) !== "failed") return { ...base, added: [crn] };
+
+  const tab = enterCrnsTab();
+  if (!tab) return { error: "The Enter CRNs tab disappeared." };
+  tab.click();
+  const input = await waitUntil(() => { const i = document.querySelector(SEL.crnInput1); return i && isVisible(i) ? i : null; }, 8000);
+  if (!input) return { error: "Opened Enter CRNs, but the CRN box didn’t appear." };
+  document.querySelectorAll(SEL.allCrnInputs).forEach((el) => { if (el.value) setValue(el, ""); });
+  setValue(input, crn);
+  await sleep(100);
+
+  const panel = input.closest("[role=tabpanel], .ui-tabs-panel, form") || document;
+  const btn = findButton(SEL.addToSummaryBtn, BTN_TEXT.addToSummary, panel);
+  if (!btn) return { error: "Couldn’t find Add to Summary." };
+  btn.click();
+  showBanner(`Added ${crn} to summary…`);
+
+  // Wait for the summary row, or for Banner to say the CRN is invalid / full.
+  const outcome = await waitUntil(() => {
+    if (rowFor(crn)) return "added";
+    const msg = [...document.querySelectorAll(".notification-item, [role=alert], .notification-center-message, .error")]
+      .find((n) => isVisible(n) && n.innerText.includes(crn));
+    return msg ? msg.innerText : null;
+  }, 10000);
+  if (outcome === "added") return { ...base, added: [crn] };
+  if (outcome && FULL_AFTER_SUBMIT.test(outcome)) return { ...base, missing: [crn], full: [crn] };
+  if (outcome) return { ...base, missing: [crn], notFound: [crn] };
+  return { error: `Clicked Add to Summary for ${crn}, but it didn’t appear in the summary.` };
+}
+
+// crn given: search by that CRN alone. Otherwise: Subject + College + Campus.
+async function runSearch(cfg, crn = null) {
+  const err = await openSearchForm();
+  if (err) return err;
+
+  const crnBox = crn ? searchCrnBox() : null;
+  if (crn && !crnBox) return "Couldn’t find the CRN box in Advanced Search.";
+  if (crnBox) {
+    for (const f of ["subject", "college", "campus"]) await clearSelect2(f);
+    document.querySelectorAll("input[type=text]").forEach((i) => {
+      if (i !== crnBox && isVisible(i) && i.value && !i.closest(".select2-container")) setValue(i, "");
+    });
+    setValue(crnBox, crn);
+  } else {
+    // Clear a CRN box left over from a CRN search, then set the filters.
+    const leftover = searchCrnBox();
+    if (leftover && leftover.value) setValue(leftover, "");
+    const subjErr = await chooseOption("subject", cfg.subject);
+    if (subjErr) return subjErr;
+    if (cfg.college) { const e = await chooseOption("college", cfg.college); if (e) return e; }
+    if (cfg.campus) { const e = await chooseOption("campus", cfg.campus); if (e) return e; }
   }
 
   const before = resultsSnapshot();
@@ -271,18 +371,24 @@ async function runSearch(cfg) {
   const ok = await waitUntil(() => resultsVisible() && resultsSnapshot() !== before, 30000);
   if (!ok) return "Search results didn’t load within 30 seconds.";
   await sleep(400);
-  await maxPageSize();
+  if (!crnBox) await maxPageSize();
   return null;
 }
+
 
 function resultRowFor(crn) {
   const re = new RegExp(`\\b${crn}\\b`);
   return [...document.querySelectorAll("tr, [role=row]")].find((r) => isVisible(r) && !inSummary(r) && re.test(r.innerText)) || null;
 }
 
+// The search-result button reads "Add" (sometimes with a + icon in front).
+// Icons and symbols are stripped first; "Add All" and "View Sections" never match.
+function buttonWords(b) {
+  return (b.innerText || b.value || b.getAttribute("aria-label") || "").replace(/[^A-Za-z ]+/g, " ").replace(/\s+/g, " ").trim();
+}
 function addButtonIn(row) {
   return [...row.querySelectorAll("button, a, input[type=button]")].find((b) =>
-    isVisible(b) && !b.disabled && BTN_TEXT.add.test((b.innerText || b.value || b.getAttribute("aria-label") || "").trim())) || null;
+    isVisible(b) && !b.disabled && BTN_TEXT.add.test(buttonWords(b))) || null;
 }
 
 // ---------------- Full / closed sections ----------------
@@ -312,18 +418,46 @@ async function firstPage() {
   if (first) await clickForNewPage(first);
 }
 
-// Make sure search results are showing (search if needed).
-async function ensureResults(readyTimeout) {
+// Make sure the right search results are showing. crn = CRN-only search.
+let lastSearchKey = null;
+async function ensureResults(readyTimeout, crn = null) {
   const ready = await waitFor(`${SEL.searchGo}, ${SEL.searchAgain}, ${SEL.findClassesTab}`, readyTimeout);
   if (!ready) return "Couldn’t find Find Classes. Open Register for Classes and pick your term.";
   const { search: cfg = {} } = await chrome.storage.local.get("search");
-  if (!cfg.subject) return "Set a Subject in the extension popup first.";
-  if (resultsVisible()) return null;
-  showBanner(`Searching ${[cfg.subject, cfg.college, cfg.campus].filter(Boolean).join(" · ")}…`);
-  const err = await runSearch(cfg);
-  if (err) return pageError() ? `Banner showed an error (“${pageError()}”).` : err;
+  if (!crn && !cfg.subject) return "Set a Subject in the extension popup first.";
+  const key = crn ? `crn:${crn}` : "filters";
+  if (resultsVisible() && lastSearchKey === key) return null;
+  showBanner(crn ? `Searching by CRN ${crn}…` : `Searching ${[cfg.subject, cfg.college, cfg.campus].filter(Boolean).join(" · ")}…`);
+  const err = await runSearch(cfg, crn);
+  if (err) { lastSearchKey = null; return pageError() ? `Banner showed an error (“${pageError()}”).` : err; }
+  lastSearchKey = key;
   return null;
 }
+
+// One CRN: single pass, click Add the moment it shows up.
+async function findAndAddOne(crn) {
+  const base = { added: [], missing: [], notFound: [], noButton: [], full: [] };
+  await firstPage();
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    if (pageError()) return { error: `Banner showed an error (“${pageError()}”).` };
+    const row = resultRowFor(crn);
+    if (row) {
+      if (rowIsFull(row)) return { ...base, missing: [crn], full: [crn] };
+      const btn = addButtonIn(row);
+      if (!btn) return { ...base, missing: [crn], noButton: [crn] };
+      btn.click();
+      showBanner(`Added ${crn}…`);
+      if (!(await waitUntil(() => rowFor(crn), 10000))) {
+        return { error: `Clicked Add for ${crn}, but it didn’t appear in the summary.` };
+      }
+      return { ...base, added: [crn] };
+    }
+    const next = pagingButton("next");
+    if (!next || !(await clickForNewPage(next))) break;
+  }
+  return { ...base, missing: [crn], notFound: [crn] };
+}
+
 
 // Pass 1: page through all results and note which candidate CRNs are there
 // and have an Add button. Nothing is clicked except the paging buttons.
@@ -566,12 +700,169 @@ async function pause(p, reason) {
 //   6. Stop as soon as the target is reached.
 let running = false;
 
+// ---------------- Plans tab ("Register from a plan") ----------------
+function plansTab() {
+  return [...document.querySelectorAll("[role=tab], .ui-tabs-anchor, a, li")].find((t) =>
+    isVisible(t) && /^\s*plans\s*$/i.test(t.textContent)) || null;
+}
+
+function addAllButton() {
+  return [...document.querySelectorAll("button, a, input[type=button]")].find((b) =>
+    isVisible(b) && !b.disabled && /^\s*add all\s*$/i.test(b.innerText || b.value || "")) || null;
+}
+
+// Phase 2: open Plans, click Add All on Plan 1 (the first plan), then Submit.
+// Runs once. Skipped if there's no Plans tab or no plan with sections.
+async function planRound(p, readyTimeout) {
+  const skip = async (why) => { p.planDone = true; p.notes.push(why); await saveProgress(p); return "continue"; };
+
+  await waitFor(`${SEL.enterCrnsTab}, ${SEL.findClassesTab}`, readyTimeout);
+  const tab = plansTab();
+  if (!tab) return skip("No Plans tab.");
+  tab.click();
+  showBanner("Opening Plans…");
+  const addAll = await waitUntil(addAllButton, 8000);
+  if (!addAll) return skip("Plans tab has no plan to add.");
+
+  // CRNs listed in Plan 1: the rows of the table that belongs to the first Add All.
+  let box = addAll.parentElement;
+  while (box && !box.querySelector("table, [role=grid]")) box = box.parentElement;
+  const planCrns = [...new Set([...(box || document).querySelectorAll("tr, [role=row]")]
+    .filter((r) => isVisible(r) && !inSummary(r))
+    .flatMap((r) => r.innerText.match(/\b\d{5}\b/g) || []))];
+  if (!planCrns.length) return skip("Plan 1 has no sections with CRNs.");
+
+  const before = new Set(planCrns.filter((c) => rowFor(c)));
+  addAll.click();
+  showBanner(`Plan 1: Add All (${planCrns.join(", ")})…`);
+  await waitUntil(() => planCrns.some((c) => rowFor(c) && !before.has(c)), 10000);
+  await sleep(1500); // let every row land in the summary
+
+  const added = planCrns.filter((c) => rowFor(c) && !p.registered.includes(c) && statusOf(c) !== "ok");
+  if (!added.length) return skip("Add All didn’t add anything new to the summary.");
+
+  // Mark done before submitting so a crash never repeats Add All.
+  p.planDone = true;
+  added.forEach((c) => (p.attempts[c] = (p.attempts[c] || 0) + 1));
+  p.inFlight = [...added];
+  p.notes.push(`Plan 1 Add All: ${added.join(", ")}.`);
+  await saveProgress(p);
+  showBanner(`Submitting plan: ${added.join(", ")}…`);
+
+  const sub = await submitAdded(added);
+  if (sub.error) {
+    if (sub.beforeSubmit) { added.forEach((c) => p.attempts[c]--); p.inFlight = []; }
+    return pause(p, sub.error);
+  }
+  const unclear = added.filter((c) => sub.results[c] === "unknown");
+  if (unclear.length) {
+    p.inFlight = unclear;
+    return pause(p, `Banner didn’t confirm ${unclear.join(", ")} within ${RESULT_TIMEOUT_MS / 1000} seconds.`);
+  }
+  p.inFlight = [];
+  for (const c of added) {
+    if (sub.results[c] === "ok") { if (!p.registered.includes(c)) p.registered.push(c); }
+    else if (rejectedAsFull(c) || (p.attempts[c] || 0) >= MAX_ATTEMPTS) {
+      if (!p.failed.includes(c)) p.failed.push(c);
+      if (rejectedAsFull(c)) p.notes.push(`Full after submit: ${c}.`);
+    }
+    // Other failures stay as candidates for the search phase if they're in your list.
+  }
+  await saveProgress(p);
+  return "continue";
+}
+
+// The first main CRN, when tried alone via CRN search, is "settled" once it's
+// registered or given up on. Until then, keep it out of the normal rounds.
+function settlePriority(p) {
+  if (!p.priority) return;
+  if (p.registered.includes(p.priority) || p.failed.includes(p.priority)) p.priorityPending = false;
+  if (p.priorityPending) p.toTry = p.toTry.filter((c) => c !== p.priority);
+}
+
+// Phase 1 (only if there's an Enter CRNs tab): type the first CRN into Enter CRNs,
+// Add to Summary, and submit it by itself. Returns "continue", or a finished pause().
+async function priorityRound(p, readyTimeout) {
+  const crn = p.priority;
+  const ready = await waitFor(`${SEL.enterCrnsTab}, ${SEL.findClassesTab}`, readyTimeout);
+  if (!ready) return pause(p, "Couldn’t find the registration tabs.");
+  const r = await addViaEnterCrns(crn);
+  if (r.error) return pause(p, r.error);
+  if (r.missing.length) {
+    p.failed.push(crn);
+    p.priorityPending = false;
+    p.notes.push(`${crn} ${r.full.length ? "is full" : "was rejected by Enter CRNs"}.`);
+    await saveProgress(p);
+    return "continue";
+  }
+
+  p.attempts[crn] = (p.attempts[crn] || 0) + 1;
+  p.inFlight = [crn];
+  await saveProgress(p);
+  showBanner(`Submitting ${crn}…`);
+  const sub = await submitAdded([crn]);
+  if (sub.error) {
+    if (sub.beforeSubmit) { p.attempts[crn]--; p.inFlight = []; }
+    return pause(p, sub.error);
+  }
+  const st = sub.results[crn];
+  if (st === "unknown") return pause(p, `Banner didn’t confirm ${crn} within ${RESULT_TIMEOUT_MS / 1000} seconds.`);
+  p.inFlight = [];
+  if (st === "ok") { p.registered.push(crn); p.priorityPending = false; }
+  else if (rejectedAsFull(crn)) { p.failed.push(crn); p.priorityPending = false; p.notes.push(`Full after submit: ${crn}.`); }
+  else if (p.attempts[crn] >= MAX_ATTEMPTS) { p.failed.push(crn); p.priorityPending = false; }
+  await saveProgress(p);
+  if (p.priorityPending) {
+    showBanner(`Retrying ${crn} in ${RETRY_DELAY_MS / 1000} seconds…`);
+    await sleep(RETRY_DELAY_MS);
+  }
+  return "continue";
+}
+
 async function runEngine(p, readyTimeout) {
   while (true) {
     if (!(await getSchedule())) { stopLock(); showBanner("Cancelled."); return; }
+
+    // First time through: check whether there's an Enter CRNs tab.
+    if (p.crnMode === undefined) {
+      showBanner("Checking for the Enter CRNs tab…");
+      const has = await detectEnterCrnsTab(readyTimeout);
+      readyTimeout = 15000;
+      if (has === null) return pause(p, "The registration page didn’t load.");
+      p.crnMode = has;
+      if (has && p.toTry.length) {
+        p.priority = p.toTry[0];
+        p.priorityPending = true;
+        p.notes.push(`Enter CRNs tab found: tried ${p.priority} there first.`);
+      } else {
+        p.notes.push("No Enter CRNs tab: searched all CRNs by Subject / College / Campus.");
+      }
+      await saveProgress(p);
+    }
+
+    settlePriority(p);
+    if (p.target - p.registered.length <= 0) break;
+
+    // Phase 1: the first CRN alone, through the Enter CRNs tab.
+    if (p.priorityPending) {
+      const res = await priorityRound(p, readyTimeout);
+      readyTimeout = 15000;
+      if (res !== "continue") return;
+      continue;
+    }
+
+    // Phase 2: Plans tab → Plan 1 → Add All → Submit (once).
+    if (!p.planDone) {
+      const res = await planRound(p, readyTimeout);
+      readyTimeout = 15000;
+      if (res !== "continue") return;
+      continue;
+    }
+
+    // Phase 3: the original search process for whatever is still needed.
     const need = p.target - p.registered.length;
     if (need <= 0) break;
-    const cands = [...p.toTry, ...p.queue];
+    const cands = [...p.toTry, ...p.queue].filter((c) => !p.registered.includes(c) && !p.failed.includes(c));
     if (!cands.length) break;
 
     const r = await prepareRound(cands, need, readyTimeout);

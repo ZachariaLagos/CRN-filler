@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root {
+    --red: #C8102E; --ink: #1d1d1f; --muted: #6b6b70; --line: #d9d9de;
+    --bg: #ffffff; --field: #f6f6f8; --ok: #1f7a3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink: #f2f2f4; --muted: #a0a0a8; --line: #3a3a40; --bg: #1b1b1f; --field: #26262b; --red: #e8364f; --ok: #5cc27e; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    width: 310px; margin: 0; padding: 16px;
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink); background: var(--bg); border-top: 4px solid #d97706;
+  }
+  h1 { font-size: 17px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  h2 { font-size: 14px; margin: 18px 0 4px; padding-top: 14px; border-top: 1px solid var(--line); }
+  p.sub { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; }
+  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  textarea, input[type="datetime-local"], input.text {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--field); color: var(--ink); font: inherit;
+  }
+  textarea { height: 90px;
+  }
+  textarea.short { height: 64px; }
+  textarea { resize: vertical; font: 15px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  textarea:focus, input:focus-visible, button:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 4px 0 12px; }
+  .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin-bottom: 14px; font-weight: 400; }
+  .check input { margin-top: 3px; accent-color: var(--red); }
+  .row { display: flex; gap: 8px; }
+  button {
+    flex: 1; padding: 9px 10px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--line); background: transparent; color: var(--ink);
+  }
+  button.primary { background: var(--red); border-color: var(--red); color: #fff; }
+  #status, #schedStatus { margin-top: 10px; font-size: 12.5px; min-height: 1.2em; }
+  .error { color: var(--red); }
+  .armed { color: var(--ok); font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>Browse Classes <span style="color:#d97706">Tester</span></h1>
+  <p class="sub">Runs on <b>Browse Classes</b> only. Uses the real search and CRN logic, but never clicks Add or Submit.</p>
+
+  <label for="crns">Main CRNs</label>
+  <textarea id="crns" class="short" placeholder="12345&#10;23456" spellcheck="false"></textarea>
+  <p class="hint">The courses you want. One per line.</p>
+
+  <label for="backups">Backup CRNs</label>
+  <textarea id="backups" class="short" placeholder="34567&#10;45678" spellcheck="false"></textarea>
+  <p class="hint">Tried in order, only for a main course that fails to register.</p>
+
+  <label for="subject">Subject</label>
+  <input type="text" id="subject" class="text" value="Computer Science" spellcheck="false">
+  <label for="college" style="margin-top:10px">College</label>
+  <input type="text" id="college" class="text" value="Khoury Coll of Comp Science" spellcheck="false">
+  <label for="campus" style="margin-top:10px">Campus</label>
+  <input type="text" id="campus" class="text" value="Silicon Valley" spellcheck="false">
+  <p class="hint">Typed into Advanced Search exactly as Banner’s dropdowns word them. Leave College or Campus blank to skip that filter.</p>
+
+  <div class="row">
+    <button id="save">Save CRNs</button>
+    <button id="fill">Run test now</button>
+  </div>
+  <div id="status" role="status"></div>
+
+  <h2>Timed test (auto-Continue + search)</h2>
+  <p class="hint">Open Browse Classes, pick a term, don’t click Continue. At this time the test clicks Continue, then runs the search test.</p>
+  <label for="openTime">Registration opens at</label>
+  <p class="hint">On the term page, pick your term but don’t click Continue. The extension clicks it at this time.</p>
+  <input type="datetime-local" id="openTime" step="1">
+  <div class="row" style="margin-top:10px">
+    <button id="arm" class="primary">Schedule</button>
+    <button id="disarm">Cancel</button>
+  </div>
+  <div id="schedStatus" role="status"></div>
+
+  <h2>Last report</h2>
+  <pre id="report" style="margin:6px 0 8px;padding:8px;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:var(--field);border:1px solid var(--line);border-radius:6px;font:11px/1.45 ui-monospace,Menlo,monospace">(none yet)</pre>
+  <div class="row"><button id="copy">Copy report</button></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

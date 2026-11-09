@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NU CRN Filler",
-  "version": "2.4.2",
+  "version": "2.7.1",
   "description": "Finds your CRNs in Northeastern Banner search results, adds them, and can register you when your window opens.",
   "permissions": ["storage", "activeTab", "notifications"],
   "host_permissions": ["https://nubanner.neu.edu/*"],

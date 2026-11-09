@@ -49,7 +49,7 @@
 
   <label for="crns">Main CRNs</label>
   <textarea id="crns" class="short" placeholder="12345&#10;23456" spellcheck="false"></textarea>
-  <p class="hint">The courses you want. One per line.</p>
+  <p class="hint">The courses you want, one per line. The first one is tried through the Enter CRNs tab first when that tab exists.</p>
 
   <label for="backups">Backup CRNs</label>
   <textarea id="backups" class="short" placeholder="34567&#10;45678" spellcheck="false"></textarea>
@@ -70,7 +70,7 @@
   <div id="status" role="status"></div>
 
   <h2>Register when my window opens</h2>
-  <p class="hint">At this time it looks for your main CRNs; any that aren’t in the results or are full are swapped for backups right away. It submits only when it has as many courses as you have main CRNs, and stops once they’re registered. A CRN that fails is retried up to 3 times before a backup takes its place.</p>
+  <p class="hint">At this time it clicks Continue, then: <b>1)</b> if there’s an <b>Enter CRNs</b> tab, types your first main CRN, Add to Summary, Submit; <b>2)</b> if there’s a <b>Plans</b> tab with a plan, clicks <b>Add All</b> on Plan 1 and Submit; <b>3)</b> fills anything still missing by searching Subject / College / Campus through your CRNs in order. It stops once you have enough.</p>
   <label for="openTime">Registration opens at</label>
   <p class="hint">On the term page, pick your term but don’t click Continue. The extension clicks it at this time.</p>
   <input type="datetime-local" id="openTime" step="1">
