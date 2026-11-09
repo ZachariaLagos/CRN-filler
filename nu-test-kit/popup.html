@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root { --red:#C8102E; --ink:#1d1d1f; --muted:#6b6b70; --line:#d9d9de; --bg:#fff; --field:#f6f6f8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#f2f2f4; --muted:#a0a0a8; --line:#3a3a40; --bg:#1b1b1f; --field:#26262b; --red:#e8364f; }
+  }
+  * { box-sizing: border-box; }
+  body { width: 360px; margin: 0; padding: 16px; font: 14px/1.5 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+         color: var(--ink); background: var(--bg); border-top: 4px solid #333; }
+  h1 { font-size: 17px; margin: 0 0 2px; }
+  p.sub { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
+  label { display: block; font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  textarea { height: 76px; resize: vertical; }
+  input[type=text], textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+         background: var(--field); color: var(--ink); font: 15px ui-monospace, Menlo, monospace; }
+  .hint { color: var(--muted); font-size: 12px; margin: 4px 0 12px; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; }
+  button { flex: 1; padding: 9px 10px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer;
+           border: 1px solid var(--line); background: transparent; color: var(--ink); }
+  button.primary { background: #333; border-color: #333; color: #fff; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+  pre { margin: 10px 0 0; padding: 10px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+        background: var(--field); border: 1px solid var(--line); border-radius: 6px; font: 11.5px/1.45 ui-monospace, Menlo, monospace; }
+  pre:empty { display: none; }
+</style>
+</head>
+<body>
+  <h1>测试工具</h1>
+  <p class="sub">扫描和提醒只读取页面。「添加到计划」只在 Plan Ahead 页面可用，不会注册任何课程。</p>
+
+  <label for="crns">要查找的课程（可选）</label>
+  <textarea id="crns" placeholder="CS 2500&#10;Fundamentals of Computer Science&#10;12345" spellcheck="false"></textarea>
+  <p class="hint">每行一个。可以填课程代码、课程名或 CRN，不区分大小写。</p>
+
+  <div class="row">
+    <button id="scan" class="primary">扫描页面</button>
+    <button id="alert">测试提醒</button>
+  </div>
+  <label for="subject" style="margin-top:14px">Subject</label>
+  <input type="text" id="subject" value="Computer Science" spellcheck="false">
+  <label for="college" style="margin-top:8px">College</label>
+  <input type="text" id="college" value="Khoury College" spellcheck="false">
+  <label for="campus" style="margin-top:8px">Campus（可选）</label>
+  <input type="text" id="campus" value="" placeholder="留空表示不限" spellcheck="false">
+
+  <label for="names" style="margin-top:10px">课程名（按优先顺序，每行一个）</label>
+  <textarea id="names" placeholder="Deep Learning&#10;Computer Graphics&#10;Robotic Science and Systems&#10;Database Management Systems" spellcheck="false"></textarea>
+  <label for="need" style="margin-top:8px">需要添加几门</label>
+  <input type="text" id="need" value="2" spellcheck="false">
+  <p class="hint">展开 Advanced Search → 填 Subject、College → 搜索 → 按顺序找课：找到就选，找不到就看下一个，选够后点 Add Course，最后点 Save Plan。只在 Plan Ahead 运行。</p>
+  <div class="row">
+    <button id="multiAdd" class="primary">按顺序添加并保存</button>
+  </div>
+  <div class="row">
+    <button id="copy">复制报告</button>
+  </div>
+  <pre id="out"></pre>
+
+  <script src="popup.js"></script>
+</body>
+</html>
