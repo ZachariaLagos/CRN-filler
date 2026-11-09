@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "NU Swap",
+  "version": "1.0.1",
+  "description": "Press once: checks one Northeastern section for an open seat 10 s later and, if open, swaps it in with Conditional Add and Drop.",
+  "permissions": ["storage", "activeTab", "notifications"],
+  "host_permissions": ["https://nubanner.neu.edu/*"],
+  "icons": { "48": "icon48.png", "128": "icon128.png" },
+  "background": { "service_worker": "background.js" },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "NU Swap",
+    "default_icon": { "48": "icon48.png", "128": "icon128.png" }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://nubanner.neu.edu/StudentRegistrationSsb/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
